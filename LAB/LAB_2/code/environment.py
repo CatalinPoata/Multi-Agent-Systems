@@ -117,7 +117,7 @@ class BlocksWorldEnvironment(Environment):
         for adata in self.agents_data:
             agent_station = adata.station
             world_stacks = self.worldstate.get_stacks()
-            current_world = self.worldstate.clone()
+            current_world = self.worldstate
 
             act = adata.agent.response(BlocksWorldPerception(current_world, agent_station,
                                                              adata.previous_action_succeeded, adata.holding))

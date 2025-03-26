@@ -34,14 +34,15 @@ class MyAgent(BlocksWorldAgent):
         if perception.current_world.contains_world(self.target_state):
             return AgentCompleted()
 
-        print(f"Intention before revision: {self.current_intention}")
+        print(f"Intention before revision: {[str(elem) for elem in self.current_intention]}")
         ## revise the agents beliefs based on the perceived state
+        print(f"Perception received by response:\n{perception.current_world}")
         self.revise_beliefs(perception)
-        print(f"Intention after revision: {self.current_intention}")
+        print(f"Intention after revision: {[str(elem) for elem in self.current_intention]}")
 
         ## Single minded agent intention execution: if the agent still has actions left in the current intention, and the intention
         ## is still applicable to the perceived state, the agent continues executing the intention
-        print(f"Are there intentions left?: {len(self.current_intention)}")
+        print(f"Are there intentions left?: {[str(elem) for elem in self.current_intention]}")
         if len(self.current_intention) > 0:
             print(
                 f"Is the first intention doable?: {self._can_apply_action(self.current_intention[0], perception.current_world, perception.holding_block)}")
@@ -51,7 +52,7 @@ class MyAgent(BlocksWorldAgent):
             ## the agent has to set a new current desire and plan to achieve it
             self.current_desire, self.current_intention = self.plan()
 
-        print(f"Intention after plan: {self.current_intention}")
+        print(f"Intention after plan: {[str(elem) for elem in self.current_intention]}")
 
         ## If there is an action in the current intention, pop it and return it
         if len(self.current_intention) > 0:
@@ -61,7 +62,7 @@ class MyAgent(BlocksWorldAgent):
             return NoAction()        
 
 
-    def _can_apply_action(self, act: BlocksWorldAction, world: BlocksWorld, holding_block: str) -> bool:
+    def _can_apply_action(self, act: BlocksWorldAction, world: BlocksWorld, holding_block: Block) -> bool:
         """
         Check if the action can be applied to the current world state.
         """
@@ -94,16 +95,25 @@ class MyAgent(BlocksWorldAgent):
                         return False
 
                     if act.get_type() == "putdown":
-                        print("We're not holding the right thing?????")
-                        print(f"Holding block: {holding_block}")
-                        print(f"Argument: {act.get_argument().__str__()}")
                         ## If we want to putdown the block we have to check if it's the same block we are holding
                         if act.get_argument() != holding_block:
+                            print("We're not holding the right thing?????")
+                            print(f"Holding block: {holding_block}, type = {type(holding_block)}")
+                            print(f"Argument: {act.get_argument().__str__()}, type = {type(act.get_argument().__str__())}")
+                            print(f"Holding block length: {len(holding_block)}")
+                            print(f"Argument length: {len(act.get_argument().__str__())}")
+                            print(f"Result: {act.get_argument().__str__() == holding_block}")
                             return False
 
                     if act.get_type() == "stack":
                         ## If we want to stack the block we have to check if it's the same block we are holding
                         if act.get_first_arg() != holding_block:
+                            print("We're not holding the right thing for stack?????")
+                            print(f"Holding block: {holding_block}, type = {type(holding_block)}")
+                            print(f"Argument: {act.get_argument().__str__()}, type = {type(act.get_argument().__str__())}")
+                            print(f"Holding block length: {len(holding_block)}")
+                            print(f"Argument length: {len(act.get_argument().__str__())}")
+                            print(f"Result: {act.get_argument().__str__() == holding_block}")
                             return False
                         ## try to stack the block
                         sim_world.stack(act.get_first_arg(), act.get_second_arg())
@@ -140,10 +150,29 @@ class MyAgent(BlocksWorldAgent):
 
         return ordered_blocks
 
+    def init_misplaced_desires(self) -> List[Block]:
+        ordered_blocks = []
+        stacks = self.target_state.get_stacks()
+        max_height = max(len(stack.get_blocks()) for stack in stacks)
+
+        for level in range(max_height):
+            for stack in stacks:
+                blocks = stack.get_blocks()
+                if level < len(blocks) and not self.is_block_in_position(blocks[level]):
+                    ordered_blocks.append(blocks[level])
+
+        return ordered_blocks
+
     def get_target_block(self, current_block):
         for stack in self.target_state.get_stacks():
             if current_block in stack.get_blocks():
                 return stack.get_below(current_block)
+
+    def is_block_locked(self, current_block):
+        for stack in self.belief.get_stacks():
+            if current_block in stack.get_locked_blocks():
+                return True
+        return False
 
     def is_target_block_on_board(self, current_block):
         target_block = self.get_target_block(current_block)
@@ -240,12 +269,18 @@ class MyAgent(BlocksWorldAgent):
         """
         #raise NotImplementedError("not implemented yet; todo by student")
 
+
         self.belief = perception.current_world
         if not self.current_desire:
             self.current_desire = self.init_desires()
 
         if not self.belief:
             self.belief = perception.current_world
+
+        for stack in perception.current_world.get_stacks():
+            for block in stack.get_locked_blocks():
+                if block in self.current_desire:
+                    self.current_desire.remove(block)
 
 
 
@@ -256,7 +291,7 @@ class MyAgent(BlocksWorldAgent):
         print(self.get_missing_blocks(perception.current_world))
 
         print("Current intention:")
-        print(self.current_intention)
+        print([str(a) for a in self.current_intention])
 
         print("Current desire:")
         print(self.current_desire)
@@ -264,8 +299,28 @@ class MyAgent(BlocksWorldAgent):
         print("Current belief:")
         print(self.belief)
 
-        if perception.holding_block is not None:
-            self.current_intention = [PutDown(Block(perception.holding_block))]
+        # if not perception.previous_action_succeeded:
+        #     self.current_desire = self.init_desires()
+
+        if len(self.current_intention) != 0:
+            act = self.current_intention[0]
+            if act.get_type() == 'lock':
+                block = act.get_first_arg()
+                if not self.is_block_in_position(block):
+                    self.current_intention = []
+                    self.current_desire.append(block)
+
+        if self.current_intention:
+            act = self.current_intention[0]
+            if not self._can_apply_action(act, perception.current_world, perception.holding_block):
+                if perception.holding_block is not None:
+                    self.current_intention = [PutDown(perception.holding_block)]
+
+                self.current_desire = self.init_misplaced_desires()
+                for stack in perception.current_world.get_stacks():
+                    for block in stack.get_locked_blocks():
+                        if block in self.current_desire:
+                            self.current_desire.remove(block)
 
 
 
@@ -273,8 +328,10 @@ class MyAgent(BlocksWorldAgent):
         # TODO: return the current desire from the set of possible / still required ones, on which the agent wants to focus next,
         # and the partial plan, as a sequence of `BlocksWorldAction' instances, that the agent wants to execute to achieve the current desire.
         intention = []
+        if len(self.current_desire) == 0:
+            return self.current_desire, [NoAction()]
 
-        current_block = copy(self.current_desire[0])
+        current_block = self.current_desire[0]
 
         print(f"Current block: {current_block}")
 
@@ -287,7 +344,11 @@ class MyAgent(BlocksWorldAgent):
         # Block is in position, therefore lock it
         if self.is_block_in_position(current_block):
             self.current_desire.pop(0)
-            return self.current_desire, [Lock(current_block)]
+            self.current_desire.append(current_block)
+            if not self.is_block_locked(current_block):
+                return self.current_desire, [Lock(current_block)]
+            else:
+                return self.current_desire, [NoAction()]
 
         # Block is not free, we have to look at the one above it
         if not self.is_block_free(current_block):
@@ -304,11 +365,13 @@ class MyAgent(BlocksWorldAgent):
             else:
                 intention.append(Unstack(current_block, self.get_below_block(current_block)))
 
-            if self.stack_vs_putdown(current_block) == PutDown:
+            if self.stack_vs_putdown(self.get_target_block(current_block)) == PutDown:
                 intention.append(PutDown(current_block))
             else:
                 intention.append(Stack(current_block, self.get_target_block(current_block)))
+            intention.append(Lock(current_block))
             self.current_desire.pop(0)
+            self.current_desire.append(current_block)
             return self.current_desire, intention
 
         else:
@@ -340,7 +403,7 @@ class Tester(object):
     SI  = "si"
     SF  = "sf"
 
-    DYNAMICS_PROB = .5
+    DYNAMICS_PROB = 0.5
 
     AGENT_NAME = "*A"
 

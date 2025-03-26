@@ -308,10 +308,13 @@ class BlockStack(object):
         if not block in self.get_blocks():
             raise ValueError("Block [%s] is not in this stack" % str(block))
 
-        if len(self.get_blocks()) == 1 or self.get_blocks()[-1] == block:
+        if len(self.get_blocks()) == 1:
             return None
         else:
             block_idx = self.get_blocks().index(block)
+            if block_idx == len(self.get_blocks()) - 1:
+                return None
+
             return self.get_blocks()[block_idx + 1]
 
 
