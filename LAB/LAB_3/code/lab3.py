@@ -20,6 +20,19 @@ def value_iteration(env, gamma=GAMMA, epsilon=EPSILON, max_iterations=MAX_ITERAT
             break
     return V
 
+def value_iteration_given_v(env, V, gamma=GAMMA, epsilon=EPSILON, max_iterations=MAX_ITERATIONS):
+    V = V
+    for i in range(max_iterations):
+        delta = 0
+        V_old = V.copy()
+        for s in range(env.observation_space.n):
+            v = V[s]
+            V[s] = max(sum(p * (r + gamma * V_old[s_]) for p, s_, r, _ in env.P[s][a]) for a in range(env.action_space.n))
+            delta = max(delta, abs(v - V[s]))
+        if delta < epsilon:
+            break
+    return V
+
 
 def gauss_seidel_value_iteration(env, V_star, gamma=GAMMA, epsilon=EPSILON, max_iterations=MAX_ITERATIONS):
     V = np.random.randn(env.observation_space.n)
@@ -69,9 +82,10 @@ def policy_iteration(env, V_star, gamma=GAMMA, max_iterations=MAX_ITERATIONS):
     errors_list = []
     for _ in range(5):
         policy = np.random.randn(env.observation_space.n)
-        V = np.random.randn(env.observation_space.n)
+        V = V_star
         errors = []
         for i in range(max_iterations):
+            V = value_iteration_given_v(env, V)
             old_policy = np.copy(policy)
             for s in range(env.observation_space.n):
                 action_values = [sum(p * (r + gamma * V[s_]) for p, s_, r, _ in env.P[s][a]) for a in
