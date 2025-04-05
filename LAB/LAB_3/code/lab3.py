@@ -82,7 +82,7 @@ def policy_iteration(env, V_star, gamma=GAMMA, max_iterations=MAX_ITERATIONS):
     errors_list = []
     for _ in range(5):
         policy = np.random.randn(env.observation_space.n)
-        V = V_star
+        V = np.zeros(V_star.shape)
         errors = []
         for i in range(max_iterations):
             V = value_iteration_given_v(env, V)
